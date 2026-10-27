@@ -382,15 +382,18 @@ int ObFTRangeDict::find_first_char_range(const ObString &single_word, ObIFTDict 
 {
   int ret = OB_SUCCESS;
   bool found = false;
+  // UTF8MB4_BIN's non-prefix strnncoll compares bytes, then lengths. Avoid
+  // repeated charset validation/lookup for these fixed-collation boundaries.
+  // Preserve the general comparison's empty/invalid-string handling.
+  const auto compare_boundary = [&single_word](const ObFTSingleWord &boundary) {
+    const ObString key = boundary.get_word();
+    return OB_UNLIKELY(key.empty() || single_word.length() <= 0 || nullptr == single_word.ptr())
+               ? ObCharset::strcmp(ObCollationType::CS_TYPE_UTF8MB4_BIN, key, single_word)
+               : key.compare(single_word);
+  };
   for (int i = 0; OB_SUCC(ret) && !found && i < range_dicts_.size(); ++i) {
-    if (ObCharset::strcmp(ObCollationType::CS_TYPE_UTF8MB4_BIN,
-                          range_dicts_[i].start_.get_word(),
-                          single_word)
-            <= 0
-        && ObCharset::strcmp(ObCollationType::CS_TYPE_UTF8MB4_BIN,
-                             range_dicts_[i].end_.get_word(),
-                             single_word)
-               >= 0) {
+    if (compare_boundary(range_dicts_[i].start_) <= 0
+        && compare_boundary(range_dicts_[i].end_) >= 0) {
       dict = range_dicts_[i].dict_;
       found = true;
     }
